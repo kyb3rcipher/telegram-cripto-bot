@@ -19,5 +19,8 @@
   "bugs": {
     "url": "https://github.com/kyb3rcipher/telegram-cripto-bot/issues"
   },
-  "homepage": "https://github.com/kyb3rcipher/telegram-cripto-bot#readme"
+  "homepage": "https://github.com/kyb3rcipher/telegram-cripto-bot#readme",
+  "dependencies": {
+    "telegraf": "^4.16.3"
+  }
 }
