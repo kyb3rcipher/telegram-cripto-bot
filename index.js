@@ -94,6 +94,30 @@ bot.on('callback_query', async (ctx) => {
                 }
             });
         break;
+        case 'configuracion-compras':
+            await ctx.editMessageText('🛠️ Configuraciones de compra:', {
+                reply_markup: {
+                    inline_keyboard: [
+                        [ { text: '🤸‍♀️ Slippage', callback_data: 'configuracion-compras-slippage' }, { text: '⛽ Gas fee', callback_data: 'configuracion-compras-gasfee' } ],
+                        [ { text: '← Volver', callback_data: 'configuracion' } ]
+                    ]
+                }
+            });
+        break;
+            case 'configuracion-compras-slippage':
+                await ctx.editMessageText('Selecciona la cantidad de compra:', {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [ { text: '0.1', callback_data: 'producto-1' }, { text: '0.5', callback_data: 'producto-2' }, { text: '1', callback_data: 'producto-3' } ],
+                            [ { text: 'Otra cantidad', callback_data: 'configuracion-compras-slippage-otra-cantidad' } ],
+                            [ { text: '← Volver', callback_data: 'menu' } ]
+                        ]
+                    }
+                });
+            break;
+            case 'configuracion-compras-gasfee':
+                ctx.replyWithMarkdown('Ingresa tu gas fee: \n(minimo 0.005 SOL)');
+            break;
     }
 });
 
