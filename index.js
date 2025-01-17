@@ -23,7 +23,7 @@ bot.command('menu', (ctx) => {
     ctx.reply('Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industrys standard dummy text ever since the 1500s', {
         reply_markup: {
             inline_keyboard: [
-                [ { text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'btn-2' } ]
+                [ { text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'vender' } ]
             ]
         }
     });
@@ -41,7 +41,7 @@ bot.on('callback_query', async (ctx) => {
         case 'menu':
             await ctx.editMessageReplyMarkup({
                 inline_keyboard: [
-                    [ { text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'btn-2' } ]
+                    [ { text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'vender' } ]
                 ]
             });
         break;
@@ -51,7 +51,22 @@ bot.on('callback_query', async (ctx) => {
                 reply_markup: {
                     inline_keyboard: [
                         [ { text: '0.5', callback_data: 'producto-1' }, { text: '1', callback_data: 'producto-2' }, { text: '2', callback_data: 'producto-3' } ],
-                        [ { text: 'Otra cantidad', callback_data: 'producto-4' } ],
+                        [ { text: 'Otra cantidad', callback_data: 'comprar-otra-cantidad' } ],
+                        [ { text: '← Volver', callback_data: 'menu' } ]
+                    ]
+                }
+            });
+        break;
+        case 'comprar-otra-cantidad':
+            await ctx.reply('Por favor, envia la cantidad');
+        break;
+
+        case 'vender':
+            await ctx.editMessageText('Selecciona la cantidad que deseas vender:', {
+                reply_markup: {
+                    inline_keyboard: [
+                        [ { text: '25%', callback_data: 'vender-25'}, { text: '50%', callback_data: 'vender-50' }, { text: '75%', callback_data: 'vender-75' } ],
+                        [ { text: 'Vender Todo (100%)', callback_data: 'vender-100' }],
                         [ { text: '← Volver', callback_data: 'menu' } ]
                     ]
                 }
