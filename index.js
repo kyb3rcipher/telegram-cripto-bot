@@ -17,7 +17,8 @@ const menu = {
     keyboard: {
         reply_markup: {
             inline_keyboard: [
-                [ { text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'vender' } ]
+                [ { text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'vender' } ],
+                [ { text: '⚙️ Configuracion', callback_data: 'configuracion'} ]
             ]
         }
     }
@@ -28,7 +29,7 @@ function launchMenu(ctx) {
 }
 
 bot.start((ctx) => {
-    const welcomeMessage = `🪐 Bienvenido a {nombre-del-bot}!
+    const welcomeMessage = `🪐 Hola, esto es {nombre-del-bot}!
 
     • El bot para jupiter swap. {nombre-del-bot} te permite comprar o vender tokens rapidamente y tambien ofrecemos muchas otras features como: {...} & mucho mas.
 
@@ -81,6 +82,18 @@ bot.on('callback_query', async (ctx) => {
                 }
             });
         break;
+
+        case 'configuracion':
+            await ctx.editMessageText('⚙️ Configuraciones:', {
+                reply_markup: {
+                    inline_keyboard: [
+                        [ { text: '✅ Notificaciones', callback_data: 'configuracion-notificaciones' } ],
+                        [ { text: '🧾 Configuracion Compras', callback_data: 'configuracion-compras' }, { text: '🪙 Configuracion Monedas', callback_data: 'configuracion-monedas' } ],
+                        [ { text: '← Volver', callback_data: 'menu' } ]
+                    ]
+                }
+            });
+        break;
     }
 });
 
@@ -90,8 +103,18 @@ bot.on('text', async (ctx) => {
         const validCode = '1234';
 
         if (accessCode === validCode) {
-            await ctx.reply('✅ Codigo de acceso correcto. Bienvenido!');
-            launchMenu(ctx);
+            await ctx.reply('✅ Codigo de acceso correcto.');
+            ctx.reply(`Bienvenido a {nombre-del-bot}!.
+                Ahora puedes comenzar a hacer trading, pero antes si deseas puedes configurarme:
+                
+                💡 Recuerda que puedes ver una explicacion de todos los comandos con: /help.`.split('\n').map(line => line.trim()).join('\n').trim(), {
+                reply_markup: {
+                    inline_keyboard: [
+                        [ { text: '📋 Menu', callback_data: 'menu' } ],
+                        [ { text: '⚙️ Configuracion', callback_data: 'configuracion'} ]
+                    ]
+                }
+            });
         } else {
             await ctx.reply('❌ Codigo de acceso incorrecto. Intantalo de nuevo.');
         }
