@@ -3,7 +3,7 @@ const { Telegraf } = require('telegraf');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-
+/********** MENUS **********/
 const menu = {
     message:`🪐 {nombre-del-bot}!
 
@@ -36,6 +36,9 @@ const settings = {
         }
     }
 };
+
+/********** COMMANDS **********/
+/* Commands Launchers */
 function launchMenu(ctx) {
     ctx.replyWithMarkdown(menu.message, menu.keyboard);
 }
@@ -43,6 +46,9 @@ function launchMenu(ctx) {
 function launchSettings(ctx) {
     ctx.reply(settings.message, settings.keyboard);
 }
+
+
+/* Commands */
 bot.start((ctx) => {
     const welcomeMessage = `🪐 Hola, esto es {nombre-del-bot}!
 
@@ -58,8 +64,11 @@ bot.start((ctx) => {
     });
 });
 bot.settings((ctx) => launchSettings(ctx));
+
 bot.command('menu', (ctx) => launchMenu(ctx));
 
+
+/**********  **********/
 bot.on('callback_query', async (ctx) => {
     const callbackData = ctx.callbackQuery.data;
 
