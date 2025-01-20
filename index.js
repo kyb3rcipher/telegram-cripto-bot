@@ -24,10 +24,25 @@ const menu = {
     }
 };
 
+const settings = {
+    'message': '⚙️ Configuraciones:',
+    'keyboard': {
+        reply_markup: {
+            inline_keyboard: [
+                [ { text: '✅ Notificaciones', callback_data: 'configuracion-notificaciones' } ],
+                [ { text: '🧾 Configuracion Compras', callback_data: 'configuracion-compras' }, { text: '🪙 Configuracion Monedas', callback_data: 'configuracion-monedas' } ],
+                [ { text: '← Volver', callback_data: 'menu' } ]
+            ]
+        }
+    }
+};
 function launchMenu(ctx) {
     ctx.replyWithMarkdown(menu.message, menu.keyboard);
 }
 
+function launchSettings(ctx) {
+    ctx.reply(settings.message, settings.keyboard);
+}
 bot.start((ctx) => {
     const welcomeMessage = `🪐 Hola, esto es {nombre-del-bot}!
 
@@ -42,7 +57,7 @@ bot.start((ctx) => {
         }
     });
 });
-
+bot.settings((ctx) => launchSettings(ctx));
 bot.command('menu', (ctx) => launchMenu(ctx));
 
 bot.on('callback_query', async (ctx) => {
@@ -83,17 +98,7 @@ bot.on('callback_query', async (ctx) => {
             });
         break;
 
-        case 'configuracion':
-            await ctx.editMessageText('⚙️ Configuraciones:', {
-                reply_markup: {
-                    inline_keyboard: [
-                        [ { text: '✅ Notificaciones', callback_data: 'configuracion-notificaciones' } ],
-                        [ { text: '🧾 Configuracion Compras', callback_data: 'configuracion-compras' }, { text: '🪙 Configuracion Monedas', callback_data: 'configuracion-monedas' } ],
-                        [ { text: '← Volver', callback_data: 'menu' } ]
-                    ]
-                }
-            });
-        break;
+        case 'configuracion': await ctx.editMessageText(settings.message, settings.keyboard); break;
         case 'configuracion-compras':
             await ctx.editMessageText('🛠️ Configuraciones de compra:', {
                 reply_markup: {
@@ -115,9 +120,23 @@ bot.on('callback_query', async (ctx) => {
                     }
                 });
             break;
+        
             case 'configuracion-compras-gasfee':
                 ctx.replyWithMarkdown('Ingresa tu gas fee: \n(minimo 0.005 SOL)');
             break;
+        case 'configuracion-monedas':
+            await ctx.editMessageText('🛠️ Configuraciones de monedas:', {
+                reply_markup: {
+                    inline_keyboard: [
+                        [ { text: '🫷 Dev holding', callback_data: 'configuracion-monedas-devholding' }, { text: '🫲 Insider holding', callback_data: 'configuracion-monedas-insiderholding' } ],
+                        [ { text: '💸 Smart Money', callback_data: 'configuracion-monedas-smartmoney' }, { text: '📦 Bundle', callback_data: 'configuracion-monedas-bundle' } ],
+                        [ { text: '🔝 Top 10', callback_data: 'configuracion-monedas-top10' }, { text: '🎯 Snipers', callback_data: 'configuracion-monedas-snipers' } ],
+                        [ { text: '← Volver', callback_data: 'configuracion' } ]
+                    ]
+                }
+            });
+        break;
+        
     }
 });
 
