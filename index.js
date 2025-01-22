@@ -133,6 +133,7 @@ bot.on('callback_query', async (ctx) => {
             case 'configuracion-compras-gasfee':
                 ctx.replyWithMarkdown('Ingresa tu gas fee: \n(minimo 0.005 SOL)');
             break;
+        
         case 'configuracion-monedas':
             await ctx.editMessageText('🛠️ Configuraciones de monedas:', {
                 reply_markup: {
@@ -145,7 +146,9 @@ bot.on('callback_query', async (ctx) => {
                 }
             });
         break;
-        
+            case 'configuracion-monedas-top10':
+                await ctx.reply('Integresa tu porcentaje minimo para el top[10]:')
+            break;
     }
 });
 
