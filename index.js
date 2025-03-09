@@ -124,7 +124,7 @@ bot.on('callback_query', async (ctx) => {
                         inline_keyboard: [
                             [ { text: '0.1', callback_data: 'producto-1' }, { text: '0.5', callback_data: 'producto-2' }, { text: '1', callback_data: 'producto-3' } ],
                             [ { text: 'Otra cantidad', callback_data: 'configuracion-compras-slippage-otra-cantidad' } ],
-                            [ { text: '← Volver', callback_data: 'menu' } ]
+                            [ { text: '← Volver', callback_data: 'configuracion-compras' } ]
                         ]
                     }
                 });
