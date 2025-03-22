@@ -1,5 +1,8 @@
 require('dotenv').config();
+
 const { Telegraf } = require('telegraf');
+const { Keypair } = require('@solana/web3.js');
+const { PublicKey } = require('@solana/web3.js');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
 
@@ -15,10 +18,12 @@ const db = new sqlite3.Database('./database.db', (err) => {
 db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
-    password TEXT
+    password TEXT,
+    public_key TEXT
 )`);
 
 let awaitingAccessCode = {};  // To manage different users in the login process
+let userSessions = {};
 
 /********** MENU **********/
 const menu = {
@@ -29,8 +34,7 @@ const menu = {
 💳 Tus carteras de Jupiter:
 → W1 (Example) - 0 SOL ($0.00 USD)
 
-💡 Usa **/menu** para ver esta ayuda.
-    `.trim(),
+💡 Usa **/menu** para ver esta ayuda.`.trim(),
     keyboard: {
         reply_markup: {
             inline_keyboard: [
@@ -58,28 +62,68 @@ bot.start((ctx) => {
 });
 
 bot.command('menu', (ctx) => {
-    ctx.replyWithMarkdown(menu.message, menu.keyboard);
+    const userId = ctx.from.id;
+    const username = userSessions[userId];
+
+    if (!username) {
+        return ctx.reply('❌ No se pudo obtener el nombre de usuario. Por favor, inicia sesión con /login <usuario> <contraseña>.');
+    }
+
+    db.get(`SELECT public_key FROM users WHERE username = ?`, [username], (err, row) => {
+        if (err) {
+            console.error('Error al obtener la clave pública:', err);
+            return ctx.reply('❌ Error al obtener la clave pública.');
+        }
+
+        if (!row) {
+            return ctx.reply('❌ Usuario no encontrado.');
+        }
+
+        const publicKey = row.public_key;
+        const menuMessage = `🪐 {nombre-del-bot}!
+
+• El bot para Jupiter swap. Compra o vende tokens rápidamente y accede a más funciones.
+
+💳 Tus carteras de Jupiter:
+→ ${publicKey} - 0 SOL ($0.00 USD)
+
+💡 Usa **/menu** para ver esta ayuda.`.trim();
+
+        ctx.replyWithMarkdown(menuMessage, menu.keyboard);
+    });
 });
 
 /********** REGISTER **********/
+// Función para convertir Uint8Array a una cadena base58
+const bs58 = require('bs58');
+
 bot.command('register', (ctx) => {
     const args = ctx.message.text.split(' ').slice(1);
     if (args.length !== 2) {
         return ctx.reply('Uso: /register <usuario> <contraseña>');
     }
-    
+
     const [username, password] = args;
-    
+
+    // Generate a new solana wallet
+    const keypair = Keypair.generate();
+    const publicKey = keypair.publicKey.toBase58();
+    const privateKey = bs58.encode(keypair.secretKey);
+
+    // Hash password
     bcrypt.hash(password, 10, (err, hash) => {
         if (err) {
             return ctx.reply('Error al registrar. Inténtalo de nuevo.');
         }
-        
-        db.run(`INSERT INTO users (username, password) VALUES (?, ?)`, [username, hash], function(err) {
+
+        // Insert the new user to the database
+        db.run(`INSERT INTO users (username, password, public_key) VALUES (?, ?, ?)`, [username, hash, publicKey], function(err) {
             if (err) {
                 return ctx.reply('⚠️ Este usuario ya existe.');
             }
-            ctx.reply('✅ Registro exitoso. Ahora puedes iniciar sesión con /login <usuario> <contraseña>.');
+
+            // Send wallet private key to the user
+            ctx.reply(`✅ Registro exitoso. Tu wallet de Solana ha sido creada.\n\n*Dirección de la wallet (clave pública):* \`${publicKey}\`\n\n*Clave privada:* \`${privateKey}\`\n\n⚠️ *IMPORTANTE:* Guarda tu clave privada en un lugar seguro. No la compartas con nadie, ya que quien la posea tendrá control total sobre tus fondos.`, { parse_mode: 'Markdown' });
         });
     });
 });
@@ -100,7 +144,7 @@ bot.command('login', (ctx) => {
 
         bcrypt.compare(password, row.password, (err, res) => {
             if (res) {
-                awaitingAccessCode[ctx.from.id] = true;
+                userSessions[ctx.from.id] = username;   // Save session username
                 ctx.reply(`✅ Bienvenido, ${username}! Ahora puedes acceder al menú con /menu.`);
             } else {
                 ctx.reply('❌ Contraseña incorrecta.');
