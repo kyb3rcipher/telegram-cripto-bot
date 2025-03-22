@@ -1,182 +1,173 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-/********** MENUS **********/
-const menu = {
-    message:`🪐 {nombre-del-bot}!
+// Connection db
+const db = new sqlite3.Database('./database.db', (err) => {
+    if (err) console.error(err.message);
+    console.log('Connecting to database SQLite.');
+});
 
-            • El bot para Jupiter swap. {nombre-del-bot} te permite comprar o vender tokens rapidamente y tambien ofrecemos muchas otras features como: {...} & mucho mas.        
-            
-            💳 Tus carteras de Jupiter:
-            ‎ ‎ ‎ ‎ ‎  → W1 (Example) - 0 SOL ($0.00 USD)
-            
-            💡 Siempre puedes ver esta ayuda con: **/menu**
-        `.split('\n').map(line => line.trim()).join('\n').trim(),
+// Create table
+db.run(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT
+)`);
+
+let awaitingAccessCode = {};  // To manage different users in the login process
+
+/********** MENU **********/
+const menu = {
+    message: `🪐 {nombre-del-bot}!
+
+• El bot para Jupiter swap. Compra o vende tokens rápidamente y accede a más funciones.
+
+💳 Tus carteras de Jupiter:
+→ W1 (Example) - 0 SOL ($0.00 USD)
+
+💡 Usa **/menu** para ver esta ayuda.
+    `.trim(),
     keyboard: {
         reply_markup: {
             inline_keyboard: [
-                [ { text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'vender' } ],
-                [ { text: '⚙️ Configuracion', callback_data: 'configuracion'} ]
+                [{ text: '💵 Comprar', callback_data: 'comprar' }, { text: '📈 Vender', callback_data: 'vender' }],
+                [{ text: '⚙️ Configuración', callback_data: 'configuracion' }]
             ]
         }
     }
 };
 
-const settings = {
-    'message': '⚙️ Configuraciones:',
-    'keyboard': {
-        reply_markup: {
-            inline_keyboard: [
-                [ { text: '✅ Notificaciones', callback_data: 'configuracion-notificaciones' } ],
-                [ { text: '🧾 Configuracion Compras', callback_data: 'configuracion-compras' }, { text: '🪙 Configuracion Monedas', callback_data: 'configuracion-monedas' } ],
-                [ { text: '← Volver', callback_data: 'menu' } ]
-            ]
-        }
-    }
-};
-
-/********** COMMANDS **********/
-/* Commands Launchers */
-function launchMenu(ctx) {
-    ctx.replyWithMarkdown(menu.message, menu.keyboard);
-}
-
-function launchSettings(ctx) {
-    ctx.reply(settings.message, settings.keyboard);
-}
-
-
-/* Commands */
+/********** COAMMNDS **********/
 bot.start((ctx) => {
-    const welcomeMessage = `🪐 Hola, esto es {nombre-del-bot}!
+    ctx.reply(`🪐 Bienvenido a {nombre-del-bot}!
 
-    • El bot para jupiter swap. {nombre-del-bot} te permite comprar o vender tokens rapidamente y tambien ofrecemos muchas otras features como: {...} & mucho mas.
+🔑 Regístrate con /register <usuario> <contraseña>
+🔓 Inicia sesión con /login <usuario> <contraseña>
 
-    🚀 Comencemos!`.split('\n').map(line => line.trim()).join('\n').trim();
-    ctx.reply(welcomeMessage, {
+🚀 Comencemos!`, {
         reply_markup: {
             inline_keyboard: [
-                [ { text: '🔑 Ingresar codigo de acceso', callback_data: 'ingresar-codigo-acceso' } ]
+                [{ text: '🔑 Ingresar código de acceso', callback_data: 'ingresar-codigo-acceso' }]
             ]
         }
     });
 });
-bot.settings((ctx) => launchSettings(ctx));
 
-bot.command('menu', (ctx) => launchMenu(ctx));
+bot.command('menu', (ctx) => {
+    ctx.replyWithMarkdown(menu.message, menu.keyboard);
+});
 
+/********** REGISTER **********/
+bot.command('register', (ctx) => {
+    const args = ctx.message.text.split(' ').slice(1);
+    if (args.length !== 2) {
+        return ctx.reply('Uso: /register <usuario> <contraseña>');
+    }
+    
+    const [username, password] = args;
+    
+    bcrypt.hash(password, 10, (err, hash) => {
+        if (err) {
+            return ctx.reply('Error al registrar. Inténtalo de nuevo.');
+        }
+        
+        db.run(`INSERT INTO users (username, password) VALUES (?, ?)`, [username, hash], function(err) {
+            if (err) {
+                return ctx.reply('⚠️ Este usuario ya existe.');
+            }
+            ctx.reply('✅ Registro exitoso. Ahora puedes iniciar sesión con /login <usuario> <contraseña>.');
+        });
+    });
+});
 
-/**********  **********/
+/********** LOGIN **********/
+bot.command('login', (ctx) => {
+    const args = ctx.message.text.split(' ').slice(1);
+    if (args.length !== 2) {
+        return ctx.reply('Uso: /login <usuario> <contraseña>');
+    }
+
+    const [username, password] = args;
+
+    db.get(`SELECT password FROM users WHERE username = ?`, [username], (err, row) => {
+        if (err || !row) {
+            return ctx.reply('❌ Usuario no encontrado.');
+        }
+
+        bcrypt.compare(password, row.password, (err, res) => {
+            if (res) {
+                awaitingAccessCode[ctx.from.id] = true;
+                ctx.reply(`✅ Bienvenido, ${username}! Ahora puedes acceder al menú con /menu.`);
+            } else {
+                ctx.reply('❌ Contraseña incorrecta.');
+            }
+        });
+    });
+});
+
+/********** CALLBACKS **********/
 bot.on('callback_query', async (ctx) => {
     const callbackData = ctx.callbackQuery.data;
 
     switch(callbackData) {
         case 'ingresar-codigo-acceso':
-            awaitingAccessCode = true;
-            await ctx.reply('Por favor, envia tu codigo de acceso');
-        break;
-
-        case 'menu': await ctx.editMessageText(menu.message, { ...menu.keyboard, parse_mode: 'Markdown' }); break;
-
+            ctx.reply('Por favor, inicia sesión con /login <usuario> <contraseña>.');
+            break;
+        case 'menu':
+            ctx.editMessageText(menu.message, { ...menu.keyboard, parse_mode: 'Markdown' });
+            break;
         case 'comprar':
-            await ctx.editMessageText('Selecciona la cantidad que deseas comprar:', {
+            ctx.editMessageText('Selecciona la cantidad que deseas comprar:', {
                 reply_markup: {
                     inline_keyboard: [
-                        [ { text: '0.5', callback_data: 'producto-1' }, { text: '1', callback_data: 'producto-2' }, { text: '2', callback_data: 'producto-3' } ],
-                        [ { text: 'Otra cantidad', callback_data: 'comprar-otra-cantidad' } ],
-                        [ { text: '← Volver', callback_data: 'menu' } ]
+                        [{ text: '0.5', callback_data: 'producto-1' }, { text: '1', callback_data: 'producto-2' }, { text: '2', callback_data: 'producto-3' }],
+                        [{ text: 'Otra cantidad', callback_data: 'comprar-otra-cantidad' }],
+                        [{ text: '← Volver', callback_data: 'menu' }]
                     ]
                 }
             });
-        break;
-        case 'comprar-otra-cantidad':
-            await ctx.reply('Por favor, envia la cantidad');
-        break;
-
+            break;
         case 'vender':
-            await ctx.editMessageText('Selecciona la cantidad que deseas vender:', {
+            ctx.editMessageText('Selecciona la cantidad que deseas vender:', {
                 reply_markup: {
                     inline_keyboard: [
-                        [ { text: '25%', callback_data: 'vender-25'}, { text: '50%', callback_data: 'vender-50' }, { text: '75%', callback_data: 'vender-75' } ],
-                        [ { text: 'Vender Todo (100%)', callback_data: 'vender-100' }],
-                        [ { text: '← Volver', callback_data: 'menu' } ]
+                        [{ text: '25%', callback_data: 'vender-25' }, { text: '50%', callback_data: 'vender-50' }, { text: '75%', callback_data: 'vender-75' }],
+                        [{ text: 'Vender Todo (100%)', callback_data: 'vender-100' }],
+                        [{ text: '← Volver', callback_data: 'menu' }]
                     ]
                 }
             });
-        break;
-
-        case 'configuracion': await ctx.editMessageText(settings.message, settings.keyboard); break;
-        case 'configuracion-compras':
-            await ctx.editMessageText('🛠️ Configuraciones de compra:', {
-                reply_markup: {
-                    inline_keyboard: [
-                        [ { text: '🤸‍♀️ Slippage', callback_data: 'configuracion-compras-slippage' }, { text: '⛽ Gas fee', callback_data: 'configuracion-compras-gasfee' } ],
-                        [ { text: '← Volver', callback_data: 'configuracion' } ]
-                    ]
-                }
-            });
-        break;
-            case 'configuracion-compras-slippage':
-                await ctx.editMessageText('Selecciona la cantidad de compra:', {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [ { text: '0.1', callback_data: 'producto-1' }, { text: '0.5', callback_data: 'producto-2' }, { text: '1', callback_data: 'producto-3' } ],
-                            [ { text: 'Otra cantidad', callback_data: 'configuracion-compras-slippage-otra-cantidad' } ],
-                            [ { text: '← Volver', callback_data: 'configuracion-compras' } ]
-                        ]
-                    }
-                });
             break;
-        
-            case 'configuracion-compras-gasfee':
-                ctx.replyWithMarkdown('Ingresa tu gas fee: \n(minimo 0.005 SOL)');
-            break;
-        
-        case 'configuracion-monedas':
-            await ctx.editMessageText('🛠️ Configuraciones de monedas:', {
+        case 'configuracion':
+            ctx.editMessageText('⚙️ Configuración:', {
                 reply_markup: {
                     inline_keyboard: [
-                        [ { text: '🫷 Dev holding', callback_data: 'configuracion-monedas-devholding' }, { text: '🫲 Insider holding', callback_data: 'configuracion-monedas-insiderholding' } ],
-                        [ { text: '💸 Smart Money', callback_data: 'configuracion-monedas-smartmoney' }, { text: '📦 Bundle', callback_data: 'configuracion-monedas-bundle' } ],
-                        [ { text: '🔝 Top 10', callback_data: 'configuracion-monedas-top10' }, { text: '🎯 Snipers', callback_data: 'configuracion-monedas-snipers' } ],
-                        [ { text: '← Volver', callback_data: 'configuracion' } ]
+                        [{ text: '✅ Notificaciones', callback_data: 'configuracion-notificaciones' }],
+                        [{ text: '🛠 Configuración Compras', callback_data: 'configuracion-compras' }, { text: '🪙 Configuración Monedas', callback_data: 'configuracion-monedas' }],
+                        [{ text: '← Volver', callback_data: 'menu' }]
                     ]
                 }
             });
-        break;
-            case 'configuracion-monedas-top10':
-                await ctx.reply('Integresa tu porcentaje minimo para el top[10]:')
             break;
     }
 });
 
-bot.on('text', async (ctx) => {
-    if (awaitingAccessCode) {
-        const accessCode = ctx.message.text;
-        const validCode = '1234';
-
-        if (accessCode === validCode) {
-            await ctx.reply('✅ Codigo de acceso correcto.');
-            ctx.reply(`Bienvenido a {nombre-del-bot}!.
-                Ahora puedes comenzar a hacer trading, pero antes si deseas puedes configurarme:
-                
-                💡 Recuerda que puedes ver una explicacion de todos los comandos con: /help.`.split('\n').map(line => line.trim()).join('\n').trim(), {
-                reply_markup: {
-                    inline_keyboard: [
-                        [ { text: '📋 Menu', callback_data: 'menu' } ],
-                        [ { text: '⚙️ Configuracion', callback_data: 'configuracion'} ]
-                    ]
-                }
-            });
-        } else {
-            await ctx.reply('❌ Codigo de acceso incorrecto. Intantalo de nuevo.');
-        }
-
-        awaitingAccessCode = false;
-    }
+/********** CIERRE DEL BOT **********/
+process.once('SIGINT', () => {
+    bot.stop('SIGINT');
+    db.close();
 });
+
+process.once('SIGTERM', () => {
+    bot.stop('SIGTERM');
+    db.close();
+});
+
+
 
 
 bot.launch();
