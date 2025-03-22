@@ -4,6 +4,7 @@
   "description": "A telegram crypto bot for solana exchange.",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -19,5 +20,9 @@
   "bugs": {
     "url": "https://github.com/kyb3rcipher/telegram-cripto-bot/issues"
   },
-  "homepage": "https://github.com/kyb3rcipher/telegram-cripto-bot#readme"
+  "homepage": "https://github.com/kyb3rcipher/telegram-cripto-bot#readme",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "telegraf": "^4.16.3"
+  }
 }
