@@ -105,7 +105,7 @@ bot.command('menu', (ctx) => {
         ctx.replyWithMarkdown(menuMessage, {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: '👛 Ver Wallet', callback_data: 'wallets' }],
+                    [{ text: '👛 Ver Wallets', callback_data: 'wallets' }],
                 ]
             }
         });
@@ -159,7 +159,7 @@ function createWalletForUser(ctx, userId) {
         const privateKey = bs58.encode(Buffer.from(keypair.secretKey));
 
         // Insert the new wallet into the database
-        db.run(`INSERT INTO wallets (user_id, wallet_name, public_key, private_key) VALUES (?, ?, ?, ?)`, [userId, 'Default', publicKey, privateKey], function (err) {
+        db.run(`INSERT INTO wallets (user_id, wallet_name, public_key, private_key) VALUES (?, ?, ?, ?)`, [userId, 'Start Wallet', publicKey, privateKey], function (err) {
             if (err) {
                 console.error(err);
                 return ctx.reply('⚠️ An error occurred while registering your first wallet.');
@@ -266,11 +266,9 @@ bot.on('callback_query', async (ctx) => {
                     }
         
                     message += `• *${row.wallet_name}*\n   → \`${row.public_key}\`\n   💰 *Balance:* ${balanceSOL.toFixed(4)} SOL\n\n`;
-        
-                    keyboard.push([{ text: `👛 ${row.wallet_name}`, callback_data: `wallet_${row.public_key}` }]);
                 }
         
-                keyboard.push([{ text: '📥 Import Wallet', callback_data: 'import_wallet' }]);
+                keyboard.push([{ text: '✅ Default Wallet', callback_data: 'set_default_wallet' }, { text: '📥 Import Wallet', callback_data: 'import_wallet' }]);
                 keyboard.push([{ text: '← Back', callback_data: 'menu' }]);
         
                 ctx.editMessageText(message, { 
