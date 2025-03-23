@@ -76,7 +76,11 @@ bot.command('menu', (ctx) => {
 
         const shortPublicKey = `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`;
 
-const menuMessage = `🪐 {bot_name}!
+        // Get the bot's name dynamically
+        const botInfo = await bot.telegram.getMe();
+        const botName = botInfo.first_name + (botInfo.last_name ? ` ${botInfo.last_name}` : '');
+
+        const menuMessage = `🪐 ${botName}!
 
 • El bot para Solana. Compra o vende tokens rápidamente y accede a más funciones.
 
