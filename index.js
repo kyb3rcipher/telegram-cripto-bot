@@ -83,12 +83,12 @@ bot.command('menu', (ctx) => {
 
         const menuMessage = `🪐 ${botName}!
 
-• El bot para Solana. Compra o vende tokens rápidamente y accede a más funciones.
+• El bot para Solana. Compra o vende tokens rapidamente y otras features como: ...} & mucho mas.
 
 💳 Tus carteras de Solana:
 → W1 *${shortPublicKey}* - (${balanceSOL.toFixed(4)} SOL)
 
-💡 Usa /menu para ver esta ayuda.
+💡 Siempre puedes ver esta ayuda con: **/menu**
 `;
 
         ctx.replyWithMarkdown(menuMessage, {
@@ -180,12 +180,12 @@ bot.on('callback_query', async (ctx) => {
 
                 const menuMessage = `🪐 ${botName}!
 
-• El bot para Solana. Compra o vende tokens rápidamente y accede a más funciones.
+• El bot para Solana. Compra o vende tokens rapidamente y otras features como: ...} & mucho mas.
 
 💳 Tus carteras de Solana:
 → W1 *${shortPublicKey}* - (${balanceSOL.toFixed(4)} SOL)
 
-💡 Usa /menu para ver esta ayuda.
+💡 Siempre puedes ver esta ayuda con: **/menu**
 `;
 
                 ctx.editMessageText(menuMessage, {
