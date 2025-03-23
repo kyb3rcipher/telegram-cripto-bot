@@ -18,8 +18,9 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER UNIQUE,
     username TEXT,
-    public_key TEXT,
-    private_key TEXT
+    default_wallet_id INTEGER,
+    
+    FOREIGN KEY (default_wallet_id) REFERENCES wallets(id) ON DELETE SET NULL
 )`);
 
 db.run(`CREATE TABLE IF NOT EXISTS wallets (
@@ -104,7 +105,7 @@ bot.command('menu', (ctx) => {
         ctx.replyWithMarkdown(menuMessage, {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: '👛 Ver Wallet', callback_data: 'wallet' }],
+                    [{ text: '👛 Ver Wallet', callback_data: 'wallets' }],
                 ]
             }
         });
@@ -115,38 +116,74 @@ bot.command('wallet', (ctx) => {
     const userId = ctx.from.id;
     const username = ctx.from.username || 'Unknown';
 
+    // Check if the user is already registered
+    db.get(`SELECT id FROM users WHERE user_id = ?`, [userId], (err, row) => {
+        if (err) {
+            console.error(err);
+            return ctx.reply('⚠️ An error occurred while verifying your account.');
+        }
+
+        // If the user does not exist, register them
+        if (!row) {
+            db.run(`INSERT INTO users (user_id, username) VALUES (?, ?)`, [userId, username], function (err) {
+                if (err) {
+                    console.error(err);
+                    return ctx.reply('⚠️ An error occurred while registering your account.');
+                }
+
+                // Create the first wallet after registering the user
+                createWalletForUser(ctx, userId);
+            });
+        } else {
+            // If the user is already registered, create the wallet
+            createWalletForUser(ctx, userId);
+        }
+    });
+});
+
+function createWalletForUser(ctx, userId) {
     // Check if the user already has at least one wallet
     db.get(`SELECT COUNT(*) as count FROM wallets WHERE user_id = ?`, [userId], (err, row) => {
         if (err) {
             console.error(err);
-            return ctx.reply('⚠️ Ocurrio un error al verificar tu wallet.');
+            return ctx.reply('⚠️ An error occurred while verifying your wallet.');
         }
 
         if (row.count > 0) {
-            return ctx.reply('✅ Ya tienes al menos una cartera registrada. Usa /menu para verlas.');
+            return ctx.reply('✅ You already have at least one wallet registered. Use /menu to view them.');
         }
 
         // Generate a new wallet for the user
         const keypair = Keypair.generate();
         const publicKey = keypair.publicKey.toBase58();
         const privateKey = bs58.encode(Buffer.from(keypair.secretKey));
-        
-        db.run(`INSERT INTO wallets (user_id, wallet_name, public_key, private_key) VALUES (?, ?, ?, ?)`, [userId, 'Default', publicKey, privateKey], (err) => {
+
+        // Insert the new wallet into the database
+        db.run(`INSERT INTO wallets (user_id, wallet_name, public_key, private_key) VALUES (?, ?, ?, ?)`, [userId, 'Default', publicKey, privateKey], function (err) {
             if (err) {
                 console.error(err);
-                return ctx.reply('⚠️ Ocurrio un error al registrar tu primera wallet.');
+                return ctx.reply('⚠️ An error occurred while registering your first wallet.');
             }
 
-            ctx.reply(`✅ Wallet generada con exito.
+            const walletId = this.lastID; // Get the ID of the newly inserted wallet
 
-🪙 *Clave publica:* \`${publicKey}\`
-🔑 *Clave privada:* \`${privateKey}\`
+            // Now, update the default_wallet_id field in the users table
+            db.run(`UPDATE users SET default_wallet_id = ? WHERE user_id = ?`, [walletId, userId], (err) => {
+                if (err) {
+                    console.error(err);
+                    return ctx.reply('⚠️ An error occurred while assigning the default wallet.');
+                }
 
-⚠️ *IMPORTANTE:* Guarda tu clave privada en un lugar seguro.`, { parse_mode: 'Markdown' });
+                ctx.reply(`✅ Wallet successfully generated and set as your default wallet.
+
+🪙 *Public key:* \`${publicKey}\`
+🔑 *Private key:* \`${privateKey}\`
+
+⚠️ *IMPORTANT:* Keep your private key in a safe place.`, { parse_mode: 'Markdown' });
+            });
         });
     });
-});
-
+}
 
 /********** CALLBACKS **********/
 bot.on('callback_query', async (ctx) => {
