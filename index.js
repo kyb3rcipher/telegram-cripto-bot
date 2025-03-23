@@ -50,6 +50,7 @@ bot.use((ctx, next) => {
     return next();
 });
 
+
 /********** Commands **********/
 bot.command('menu', (ctx) => {
     const userId = ctx.from.id;
@@ -140,6 +141,93 @@ bot.command('wallet', (ctx) => {
 ⚠️ *IMPORTANTE:* Guarda tu clave privada en un lugar seguro.`, { parse_mode: 'Markdown' });
         });
     });
+});
+
+
+/********** CALLBACKS **********/
+bot.on('callback_query', async (ctx) => {
+    const callbackData = ctx.callbackQuery.data;
+
+    switch(callbackData) {
+        case 'menu':
+            const userId = ctx.from.id;
+
+            db.get(`SELECT public_key FROM users WHERE user_id = ?`, [userId], async (err, row) => {
+                if (err) {
+                    console.error(err);
+                    return ctx.reply('⚠️ Error al recuperar tu información.');
+                }
+
+                if (!row) {
+                    return ctx.reply('⚠️ No tienes una wallet registrada. Usa /wallet para crear una.');
+                }
+
+                const publicKey = row.public_key;
+                let balanceSOL = 0;
+
+                try {
+                    const balanceLamports = await connection.getBalance(new PublicKey(publicKey));
+                    balanceSOL = balanceLamports / 1e9; // Convert lamports to SOL
+                } catch (error) {
+                    console.error('Error al obtener saldo:', error);
+                }
+
+                const shortPublicKey = `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`;
+
+                // Get the bot's name dynamically
+                const botInfo = await bot.telegram.getMe();
+                const botName = botInfo.first_name + (botInfo.last_name ? ` ${botInfo.last_name}` : '');
+
+                const menuMessage = `🪐 ${botName}!
+
+• El bot para Solana. Compra o vende tokens rápidamente y accede a más funciones.
+
+💳 Tus carteras de Solana:
+→ W1 *${shortPublicKey}* - (${balanceSOL.toFixed(4)} SOL)
+
+💡 Usa /menu para ver esta ayuda.
+`;
+
+                ctx.editMessageText(menuMessage, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '👛 Ver Wallet', callback_data: 'wallet' }],
+                        ]
+                    },
+                    parse_mode: 'Markdown'
+                });
+            });
+            break;
+
+        case 'wallet':
+            const userIdForWallet = ctx.from.id;
+
+            db.get(`SELECT public_key, private_key FROM users WHERE user_id = ?`, [userIdForWallet], (err, row) => {
+                if (err) {
+                    console.error(err);
+                    ctx.reply('⚠️ Ocurrio un error al verificar tu wallet.');
+                }
+
+                if (row) {
+                    ctx.editMessageText(`✅ Ya tienes una wallet registrada.
+
+🪙 *Clave publica:* \`${row.public_key}\`
+🔑 *Clave privada:* \`${row.private_key}\`
+
+⚠️ *IMPORTANTE:* Guarda tu clave privada en un lugar seguro.`, { 
+                        reply_markup: { 
+                            inline_keyboard: [
+                                [{ text: '← Volver', callback_data: 'menu' }]
+                            ]
+                        },
+                        parse_mode: 'Markdown' 
+                    });
+                } else {
+                    ctx.reply('⚠️ No tienes una wallet registrada. Usa /wallet para crear una.');
+                }
+            });
+            break;
+    }
 });
 
 
