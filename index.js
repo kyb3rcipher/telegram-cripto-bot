@@ -13,7 +13,7 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
     console.log('✅ Connecting to database.');
 });
 
-// Create users table if it does not exist
+// Create tables if it does not exist
 db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER UNIQUE,
@@ -22,9 +22,19 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
     private_key TEXT
 )`);
 
-const authenticatedUsers = new Set(); // Temporarily store authenticated users in memory
+db.run(`CREATE TABLE IF NOT EXISTS wallets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    wallet_name TEXT,
+    public_key TEXT UNIQUE,
+    private_key TEXT UNIQUE
+)`);
 
-/********** Start and authetication **********/
+
+const authenticatedUsers = new Set(); // Temporarily store authenticated users in memory
+const pendingWalletImports = {}; // Store users in the process of importing wallets
+
+/********** Start and authentication **********/
 bot.start((ctx) => {
     if (authenticatedUsers.has(ctx.from.id)) {
         return ctx.reply('✅ Ya estas autenticado.');
@@ -55,14 +65,14 @@ bot.use((ctx, next) => {
 bot.command('menu', (ctx) => {
     const userId = ctx.from.id;
 
-    db.get(`SELECT public_key FROM users WHERE user_id = ?`, [userId], async (err, row) => {
+    db.get(`SELECT public_key FROM wallets WHERE user_id = ?`, [userId], async (err, row) => {
         if (err) {
             console.error(err);
             return ctx.reply('⚠️ Error al recuperar tu información.');
         }
 
         if (!row) {
-            return ctx.reply('⚠️ No tienes una wallet registrada. Usa /wallet para crear una.');
+            return ctx.reply('⚠️ No tienes al menos una wallet registrada. Usa /wallet para crear una.');
         }
 
         const publicKey = row.public_key;
@@ -72,7 +82,7 @@ bot.command('menu', (ctx) => {
             const balanceLamports = await connection.getBalance(new PublicKey(publicKey));
             balanceSOL = balanceLamports / 1e9; // Convert lamports to SOL
         } catch (error) {
-            console.error('Error al obtener saldo:', error);
+            console.error('Error al obtener balance:', error);
         }
 
         const shortPublicKey = `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`;
@@ -103,34 +113,28 @@ bot.command('menu', (ctx) => {
 
 bot.command('wallet', (ctx) => {
     const userId = ctx.from.id;
-    const username = ctx.from.username || 'Desconocido';
+    const username = ctx.from.username || 'Unknown';
 
-    // Check if the user already has a wallet in the database
-    db.get(`SELECT public_key, private_key FROM users WHERE user_id = ?`, [userId], (err, row) => {
+    // Check if the user already has at least one wallet
+    db.get(`SELECT COUNT(*) as count FROM wallets WHERE user_id = ?`, [userId], (err, row) => {
         if (err) {
             console.error(err);
             return ctx.reply('⚠️ Ocurrio un error al verificar tu wallet.');
         }
 
-        if (row) {
-            return ctx.reply(`✅ Ya tienes una wallet registrada.
-
-🪙 *Clave publica:* \`${row.public_key}\`
-🔑 *Clave privada:* \`${row.private_key}\`
-
-⚠️ *IMPORTANTE:* Guarda tu clave privada en un lugar seguro.`, { parse_mode: 'Markdown' });
+        if (row.count > 0) {
+            return ctx.reply('✅ Ya tienes al menos una cartera registrada. Usa /menu para verlas.');
         }
 
-        // Else the user does not have a wallet, generate a new one
+        // Generate a new wallet for the user
         const keypair = Keypair.generate();
         const publicKey = keypair.publicKey.toBase58();
         const privateKey = bs58.encode(Buffer.from(keypair.secretKey));
-
-        db.run(`INSERT INTO users (user_id, username, public_key, private_key) VALUES (?, ?, ?, ?)`, 
-        [userId, username, publicKey, privateKey], (err) => {
+        
+        db.run(`INSERT INTO wallets (user_id, wallet_name, public_key, private_key) VALUES (?, ?, ?, ?)`, [userId, 'Default', publicKey, privateKey], (err) => {
             if (err) {
                 console.error(err);
-                return ctx.reply('⚠️ Ocurrio un error al registrar tu wallet.');
+                return ctx.reply('⚠️ Ocurrio un error al registrar tu primera wallet.');
             }
 
             ctx.reply(`✅ Wallet generada con exito.
@@ -147,15 +151,14 @@ bot.command('wallet', (ctx) => {
 /********** CALLBACKS **********/
 bot.on('callback_query', async (ctx) => {
     const callbackData = ctx.callbackQuery.data;
+    const userId = ctx.from.id;
 
     switch(callbackData) {
         case 'menu':
-            const userId = ctx.from.id;
-
-            db.get(`SELECT public_key FROM users WHERE user_id = ?`, [userId], async (err, row) => {
+            db.get(`SELECT public_key FROM wallets WHERE user_id = ?`, [userId], async (err, row) => {
                 if (err) {
                     console.error(err);
-                    return ctx.reply('⚠️ Error al recuperar tu información.');
+                    return ctx.reply('⚠️ Error al recuperar tu informacion.');
                 }
 
                 if (!row) {
@@ -169,7 +172,7 @@ bot.on('callback_query', async (ctx) => {
                     const balanceLamports = await connection.getBalance(new PublicKey(publicKey));
                     balanceSOL = balanceLamports / 1e9; // Convert lamports to SOL
                 } catch (error) {
-                    console.error('Error al obtener saldo:', error);
+                    console.error('Error al obtener el balance:', error);
                 }
 
                 const shortPublicKey = `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`;
@@ -180,7 +183,7 @@ bot.on('callback_query', async (ctx) => {
 
                 const menuMessage = `🪐 ${botName}!
 
-• El bot para Solana. Compra o vende tokens rapidamente y otras features como: ...} & mucho mas.
+• El bot para Solana. Compra o vende tokens rapidamente y otras features como: ... & mucho mas.
 
 💳 Tus carteras de Solana:
 → W1 *${shortPublicKey}* - (${balanceSOL.toFixed(4)} SOL)
@@ -191,7 +194,7 @@ bot.on('callback_query', async (ctx) => {
                 ctx.editMessageText(menuMessage, {
                     reply_markup: {
                         inline_keyboard: [
-                            [{ text: '👛 Ver Wallet', callback_data: 'wallet' }],
+                            [{ text: '👛 Ver Wallets', callback_data: 'wallets' }],
                         ]
                     },
                     parse_mode: 'Markdown'
@@ -199,34 +202,115 @@ bot.on('callback_query', async (ctx) => {
             });
             break;
 
-        case 'wallet':
+        case 'wallets':
             const userIdForWallet = ctx.from.id;
-
-            db.get(`SELECT public_key, private_key FROM users WHERE user_id = ?`, [userIdForWallet], (err, row) => {
+        
+            db.all(`SELECT wallet_name, public_key FROM wallets WHERE user_id = ?`, [userIdForWallet], async (err, rows) => {
                 if (err) {
                     console.error(err);
-                    ctx.reply('⚠️ Ocurrio un error al verificar tu wallet.');
+                    ctx.reply('⚠️ Ocurrio un error al verificar tus wallets.');
                 }
-
-                if (row) {
-                    ctx.editMessageText(`✅ Ya tienes una wallet registrada.
-
-🪙 *Clave publica:* \`${row.public_key}\`
-🔑 *Clave privada:* \`${row.private_key}\`
-
-⚠️ *IMPORTANTE:* Guarda tu clave privada en un lugar seguro.`, { 
-                        reply_markup: { 
-                            inline_keyboard: [
-                                [{ text: '← Volver', callback_data: 'menu' }]
-                            ]
-                        },
-                        parse_mode: 'Markdown' 
-                    });
-                } else {
-                    ctx.reply('⚠️ No tienes una wallet registrada. Usa /wallet para crear una.');
+        
+                if (rows.length === 0) {
+                    return ctx.reply('⚠️ No tienes al menos una wallet registrada. Usa /wallet para crear una.');
                 }
+        
+                let message = '👛 *Tus wallets registradas:*\n\n';
+                let keyboard = [];
+        
+                for (const row of rows) {
+                    let balanceSOL = 0;
+        
+                    try {
+                        const balanceLamports = await connection.getBalance(new PublicKey(row.public_key));
+                        balanceSOL = balanceLamports / 1e9; // Convert lamports to SOL
+                    } catch (error) {
+                        console.error(`❌ Error al obtener el balance para la wallet ${row.public_key}:`, error);
+                    }
+        
+                    message += `• *${row.wallet_name}*\n   → \`${row.public_key}\`\n   💰 *Balance:* ${balanceSOL.toFixed(4)} SOL\n\n`;
+        
+                    keyboard.push([{ text: `👛 ${row.wallet_name}`, callback_data: `wallet_${row.public_key}` }]);
+                }
+        
+                keyboard.push([{ text: '📥 Import Wallet', callback_data: 'import_wallet' }]);
+                keyboard.push([{ text: '← Back', callback_data: 'menu' }]);
+        
+                ctx.editMessageText(message, { 
+                    reply_markup: { inline_keyboard: keyboard },
+                    parse_mode: 'Markdown' 
+                });
             });
             break;
+
+    case 'import_wallet':
+        // Check if the user is already in the process of importing
+        if (pendingWalletImports[userId]) {
+            return ctx.reply('⚠️ Ya estas en proecso de importar una wallet.');
+        }
+
+        // Ask for the private key
+        ctx.reply('📝 Ingresa la private key de la wallet a importar:');
+        pendingWalletImports[userId] = 'waiting_for_private_key'; // Waiting for private key
+        break;
+    }
+});
+
+
+/********** Listeners **********/
+// import_wallet Private key
+// Keep the keys separated in a different object
+const userKeys = {}; // To store users' private and public keys
+
+bot.on('text', async (ctx) => {
+    const userId = ctx.from.id;
+
+    if (pendingWalletImports[userId] === 'waiting_for_private_key') {
+        const privateKey = ctx.message.text;
+
+        try {
+            // Decode the private key from Base58
+            const secretKey = bs58.decode(privateKey);
+            const keypair = Keypair.fromSecretKey(secretKey);
+            const publicKey = keypair.publicKey.toBase58();
+
+            // Store the keys in a separate object
+            userKeys[userId] = { privateKey, publicKey };
+
+            // Change the import state
+            pendingWalletImports[userId] = 'waiting_for_wallet_name';
+
+            // Ask for the wallet name
+            ctx.reply('📝 Enter a name for this wallet:');
+        } catch (error) {
+            console.error('Error importing wallet:', error);
+            return ctx.reply('⚠️ The entered private key is not valid. Try again.');
+        }
+    } else if (pendingWalletImports[userId] === 'waiting_for_wallet_name') {
+        const walletName = ctx.message.text;
+
+        // Get the keys from the userKeys object
+        const { privateKey, publicKey } = userKeys[userId];
+
+        // Insert the new wallet into the database
+        db.run(`INSERT INTO wallets (user_id, wallet_name, public_key, private_key) VALUES (?, ?, ?, ?)`,  [userId, walletName, publicKey, privateKey], (err) => {
+            if (err) {
+                console.error(err);
+                return ctx.reply('⚠️ An error occurred while registering the wallet.');
+            }
+
+            // Clear the import state after registering
+            delete pendingWalletImports[userId];
+            delete userKeys[userId]; // Clear the keys from the userKeys object
+
+            // Confirm the import with the user
+            ctx.reply(`✅ Tu wallet fue importada con exito como: *${walletName}*.
+
+🪙 *Public key:* \`${publicKey}\`
+🔑 *Private key:* \`${privateKey}\`
+
+⚠️ *IMPORTANT:* Manten tu private key en un lugar seguro.`, { parse_mode: 'Markdown' });
+        });
     }
 });
 
